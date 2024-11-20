@@ -81,6 +81,14 @@ int luaopen_FlywheelGraphics(lua_State *L) {
 extern FlywheelSD sd;
 
 
+// General Lua Passthrough Methods
+int lua_sleep(lua_State *L) {
+    int duration = luaL_checkinteger(L, 1);  // Get the duration (in milliseconds) from Lua
+    delay(duration);  // Sleep for the specified duration
+    return 0;  // No return values
+}
+
+
 // Lua Supporters
 lua_State *L; // Global lua state
 void *lua_psram_allocator(void *ud, void *ptr, size_t osize, size_t nsize) {
@@ -174,6 +182,10 @@ bool lua_init_interpreter() {
     lua_pushcfunction(L, lua_load_from_sd);  // Push your custom loader
     lua_settable(L, -3);  // package.searchers[new index] = lua_load_from_sd
     lua_pop(L, 2);  // Clean the stack (package and searchers)
+
+    // Register the global sleep function
+    lua_pushcfunction(L, lua_sleep);
+    lua_setglobal(L, "sleep");  // Make it accessible globally as "sleep"
 
 	// Lua init complete!
 	return true;

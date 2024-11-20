@@ -30,10 +30,7 @@ public:
 
     // Clear the display to a specified color (0 = black, 1 = white)
     void clear(uint8_t color) {
-        display.clearDisplay(); // Leverages Adafruit's clearDisplay method
-        if (color == 0) {
-            display.fillScreen(0); // Optional, fill to ensure black
-        }
+        display.fillScreen(color);
     }
 
     // Draw a pixel at the specified position
