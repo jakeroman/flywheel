@@ -81,6 +81,106 @@ int luaopen_FlywheelGraphics(lua_State *L) {
 extern FlywheelSD sd;
 
 
+// Flywheel Input
+#include "input.hpp"
+extern FlywheelInput input;
+
+int lua_FlywheelInput_checkUp(lua_State *L) {
+    lua_pushboolean(L, input.check_up());  // Push the result as a boolean to the Lua stack
+    return 1;  // Return 1 value to Lua (the boolean)
+}
+
+int lua_FlywheelInput_checkDown(lua_State *L) {
+    lua_pushboolean(L, input.check_down());
+    return 1;
+}
+
+int lua_FlywheelInput_checkLeft(lua_State *L) {
+    lua_pushboolean(L, input.check_left());
+    return 1;
+}
+
+int lua_FlywheelInput_checkRight(lua_State *L) {
+    lua_pushboolean(L, input.check_right());
+    return 1;
+}
+
+int lua_FlywheelInput_checkA(lua_State *L) {
+    lua_pushboolean(L, input.check_a());
+    return 1;
+}
+
+int lua_FlywheelInput_checkB(lua_State *L) {
+    lua_pushboolean(L, input.check_b());
+    return 1;
+}
+
+static const luaL_Reg FlywheelInputLib[] = {
+    {"checkUp", lua_FlywheelInput_checkUp},
+    {"checkDown", lua_FlywheelInput_checkDown},
+    {"checkLeft", lua_FlywheelInput_checkLeft},
+    {"checkRight", lua_FlywheelInput_checkRight},
+    {"checkA", lua_FlywheelInput_checkA},
+    {"checkB", lua_FlywheelInput_checkB},
+    {NULL, NULL}  // Sentinel to mark the end of the array
+};
+
+int luaopen_FlywheelInput(lua_State *L) {
+    luaL_newlib(L, FlywheelInputLib);  // Create a new Lua table with the functions
+    return 1;  // Return the table on the Lua stack
+}
+
+
+// Flywheel GB
+#include "gb.hpp"
+FlywheelGB emulator; // Global FlywheelGB instance
+
+int lua_FlywheelGB_loadROM(lua_State *L) {
+    const char* path = luaL_checkstring(L, 1); // Get ROM file path from Lua
+    lua_pushstring(L, emulator.load_rom(path).c_str());
+    return 1;
+}
+
+int lua_FlywheelGB_startEmulator(lua_State *L) {
+    if (emulator.start_emulator()) {
+        lua_pushboolean(L, 1); // Success
+    } else {
+        lua_pushboolean(L, 0); // Failure
+    }
+    return 1; // Return boolean
+}
+
+int lua_FlywheelGB_stopEmulator(lua_State *L) {
+    emulator.stop_emulator();
+    return 0; // No return values
+}
+
+int lua_FlywheelGB_getFramebuffer(lua_State *L) {
+    const uint8_t* framebuffer = emulator.get_framebuffer();
+    if (!framebuffer) {
+        lua_pushnil(L); // Push nil if framebuffer is unavailable
+        return 1;
+    }
+
+    // Create a Lua string containing the framebuffer data
+    lua_pushlstring(L, reinterpret_cast<const char*>(framebuffer), 160 * 144);
+    return 1; // Return the string
+}
+
+static const luaL_Reg FlywheelGBLib[] = {
+    {"loadROM", lua_FlywheelGB_loadROM},
+    {"startEmulator", lua_FlywheelGB_startEmulator},
+    {"stopEmulator", lua_FlywheelGB_stopEmulator},
+    {"getFramebuffer", lua_FlywheelGB_getFramebuffer},
+    {NULL, NULL} // Sentinel to mark the end of the array
+};
+
+int luaopen_FlywheelGB(lua_State *L) {
+    luaL_newlib(L, FlywheelGBLib); // Create a new Lua table with the functions
+    return 1; // Return the table on the Lua stack
+}
+
+
 // General Lua Passthrough Methods
 int lua_sleep(lua_State *L) {
     int duration = luaL_checkinteger(L, 1);  // Get the duration (in milliseconds) from Lua
@@ -96,43 +196,32 @@ void *lua_psram_allocator(void *ud, void *ptr, size_t osize, size_t nsize) {
     (void)osize;  // Original size, not used here
 
     // Debug: Log the allocation request
-    Serial.printf("Lua allocator: ptr=%p, osize=%zu, nsize=%zu\n", ptr, osize, nsize);
+    Serial.printf("Lua SRAM allocator: ptr=%p, osize=%zu, nsize=%zu\n", ptr, osize, nsize);
 
     // Free memory if nsize is 0
     if (nsize == 0) {
         if (ptr != NULL) {
-            heap_caps_free(ptr);
-            Serial.println("Lua allocator: memory freed.");
+            free(ptr);  // Use standard free() for SRAM
+            Serial.println("Lua SRAM allocator: memory freed.");
         }
         return NULL;
     }
 
-    // Allocate or reallocate memory
+    // Allocate or reallocate memory in SRAM
     void *new_ptr = NULL;
-
     if (ptr == NULL) {
-        // Allocate new memory in PSRAM
-        new_ptr = heap_caps_malloc(nsize, MALLOC_CAP_SPIRAM);
+        // Allocate new memory in SRAM
+        new_ptr = malloc(nsize);  // Use standard malloc() for SRAM
     } else {
-        // Reallocate existing memory in PSRAM
-        new_ptr = heap_caps_realloc(ptr, nsize, MALLOC_CAP_SPIRAM);
-    }
-
-    // Fallback to SRAM if PSRAM allocation fails
-    if (new_ptr == NULL) {
-        Serial.println("Lua allocator: PSRAM allocation failed, falling back to SRAM.");
-        if (ptr == NULL) {
-            new_ptr = heap_caps_malloc(nsize, MALLOC_CAP_8BIT);  // Allocate in SRAM
-        } else {
-            new_ptr = heap_caps_realloc(ptr, nsize, MALLOC_CAP_8BIT);  // Reallocate in SRAM
-        }
+        // Reallocate existing memory in SRAM
+        new_ptr = realloc(ptr, nsize);  // Use standard realloc() for SRAM
     }
 
     // Check if allocation succeeded
     if (new_ptr == NULL) {
-        Serial.printf("Lua allocator: Allocation failed. Requested size: %zu bytes.\n", nsize);
+        Serial.printf("Lua SRAM allocator: Allocation failed. Requested size: %zu bytes.\n", nsize);
     } else {
-        Serial.printf("Lua allocator: Memory allocated at %p (size: %zu bytes).\n", new_ptr, nsize);
+        Serial.printf("Lua SRAM allocator: Memory allocated at %p (size: %zu bytes).\n", new_ptr, nsize);
     }
 
     return new_ptr;
@@ -170,9 +259,22 @@ bool lua_init_interpreter() {
     }
     luaL_openlibs(L);  // Load Lua standard libraries
 
+
     // Register FlywheelGraphics library
     luaL_requiref(L, "graphics", luaopen_FlywheelGraphics, 1);
     lua_pop(L, 1);  // Remove library table from stack after registration
+
+    // Register FlywheelInput library
+    luaL_requiref(L, "input", luaopen_FlywheelInput, 1);
+    lua_pop(L, 1);  // Remove library table from stack after registration
+
+    // Register FlywheelGB library
+    luaL_requiref(L, "emulator", luaopen_FlywheelGB, 1);
+    lua_pop(L, 1); // Remove library table from stack after registration
+
+    // Register the global sleep function
+    lua_pushcfunction(L, lua_sleep);
+    lua_setglobal(L, "sleep");  // Make it accessible globally as "sleep"
 
     // Register custom SD card loader
     lua_getglobal(L, "package");
@@ -182,10 +284,6 @@ bool lua_init_interpreter() {
     lua_pushcfunction(L, lua_load_from_sd);  // Push your custom loader
     lua_settable(L, -3);  // package.searchers[new index] = lua_load_from_sd
     lua_pop(L, 2);  // Clean the stack (package and searchers)
-
-    // Register the global sleep function
-    lua_pushcfunction(L, lua_sleep);
-    lua_setglobal(L, "sleep");  // Make it accessible globally as "sleep"
 
 	// Lua init complete!
 	return true;
