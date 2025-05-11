@@ -7,7 +7,7 @@ extern "C" {
 	#include <lauxlib.h>
 	#include <lualib.h>
 }
-#include <esp_heap_caps.h>
+#include "esp_heap_caps.h"
 
 
 // Flywheel Graphics
@@ -167,11 +167,17 @@ int lua_FlywheelGB_getFramebuffer(lua_State *L) {
     return 1; // Return the string
 }
 
+int lua_FlywheelGB_drawFramebuffer(lua_State *L) {
+    emulator.draw_framebuffer();
+    return 0; // No return values
+}
+
 static const luaL_Reg FlywheelGBLib[] = {
     {"loadROM", lua_FlywheelGB_loadROM},
     {"startEmulator", lua_FlywheelGB_startEmulator},
     {"stopEmulator", lua_FlywheelGB_stopEmulator},
     {"getFramebuffer", lua_FlywheelGB_getFramebuffer},
+    {"drawFramebuffer", lua_FlywheelGB_drawFramebuffer},
     {NULL, NULL} // Sentinel to mark the end of the array
 };
 
@@ -189,43 +195,43 @@ int lua_sleep(lua_State *L) {
 }
 
 
-// Lua Supporters
+// Lua Core
 lua_State *L; // Global lua state
-void *lua_psram_allocator(void *ud, void *ptr, size_t osize, size_t nsize) {
-    (void)ud;  // Unused userdata parameter
-    (void)osize;  // Original size, not used here
 
-    // Debug: Log the allocation request
-    Serial.printf("Lua SRAM allocator: ptr=%p, osize=%zu, nsize=%zu\n", ptr, osize, nsize);
-
-    // Free memory if nsize is 0
+// Memory Allocation
+void* lua_internal_allocator(void* ud, void* ptr, size_t osize, size_t nsize) {
+    (void)ud; (void)osize;
     if (nsize == 0) {
-        if (ptr != NULL) {
-            free(ptr);  // Use standard free() for SRAM
-            Serial.println("Lua SRAM allocator: memory freed.");
-        }
-        return NULL;
+        free(ptr);
+        return nullptr;
+    }
+    return realloc(ptr, nsize);
+}
+
+void* lua_psram_allocator(void* ud, void* ptr, size_t osize, size_t nsize) {
+    (void)ud; (void)osize;
+
+    // Freeing memory
+    if (nsize == 0) {
+        free(ptr);
+        return nullptr;
     }
 
-    // Allocate or reallocate memory in SRAM
-    void *new_ptr = NULL;
-    if (ptr == NULL) {
-        // Allocate new memory in SRAM
-        new_ptr = malloc(nsize);  // Use standard malloc() for SRAM
-    } else {
-        // Reallocate existing memory in SRAM
-        new_ptr = realloc(ptr, nsize);  // Use standard realloc() for SRAM
-    }
+    // Reallocate memory using the appropriate allocator
+    void* new_ptr;
 
-    // Check if allocation succeeded
-    if (new_ptr == NULL) {
-        Serial.printf("Lua SRAM allocator: Allocation failed. Requested size: %zu bytes.\n", nsize);
+    if (nsize >= 2048 && psramFound()) {
+        // Large allocation -> use PSRAM
+        new_ptr = heap_caps_realloc(ptr, nsize, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     } else {
-        Serial.printf("Lua SRAM allocator: Memory allocated at %p (size: %zu bytes).\n", new_ptr, nsize);
+        // Small allocation -> use internal RAM
+        new_ptr = realloc(ptr, nsize);
     }
 
     return new_ptr;
 }
+
+
 
 int lua_load_from_sd(lua_State *L) {
     const char* filename = luaL_checkstring(L, 1);  // Get the module name from the stack
@@ -257,8 +263,8 @@ bool lua_init_interpreter() {
     if (L == NULL) {
         return false;
     }
+    lua_checkstack(L, 64);  // Enough for most scripts but prevents deep recursion
     luaL_openlibs(L);  // Load Lua standard libraries
-
 
     // Register FlywheelGraphics library
     luaL_requiref(L, "graphics", luaopen_FlywheelGraphics, 1);

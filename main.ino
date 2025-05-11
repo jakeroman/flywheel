@@ -5,35 +5,30 @@
 #include "graphics.hpp"
 #include "sd.hpp"
 #include "input.hpp"
-#include <esp_heap_caps.h> // Required for PSRAM functions
+#include <esp_heap_caps.h>
 
 FlywheelGraphics graphics;
 FlywheelSD sd;
 FlywheelInput input;
 
 void setup() {
+  psramInit();
+
+  // Setup input
   input.begin(); // configure inputs
+  if (input.check_a()) {
+    while (true) {
+      delay(100);
+    }
+  }
   delay(1000);
 
   // display splash screen
 	graphics.begin();
 	graphics.clear(1);
 	graphics.drawText(150, 100, "Flywheel", 2, 0);
-  if (psramInit()) {
-	  graphics.drawText(100, 140, "Loaded PSRAM", 2, 0);
-  }
-  else {
-	  graphics.drawText(50, 140, "No PSRAM Detected", 2, 0);
-  }
 	graphics.refresh();
   delay(500);
-
-  size_t free_psram = heap_caps_get_free_size(MALLOC_CAP_SPIRAM);
-  char buffer[50];  // Buffer to hold the free PSRAM message
-  snprintf(buffer, sizeof(buffer), "Free PSRAM: %u bytes", free_psram);
-  graphics.drawText(100, 40, buffer, 2, 0);
-  graphics.refresh();
-  delay(200);
 
   // setup lua interpreter
 	lua_init_interpreter();
