@@ -179,6 +179,18 @@ public:
         }
     }
 
+    // Method for providing input to the console
+    void set_input_state(bool up, bool down, bool left, bool right, bool a, bool b, bool select, bool start) {
+        gb.direct.joypad_bits.up     = !up;
+        gb.direct.joypad_bits.down   = !down;
+        gb.direct.joypad_bits.left   = !left;
+        gb.direct.joypad_bits.right  = !right;
+        gb.direct.joypad_bits.a      = !a;
+        gb.direct.joypad_bits.b      = !b;
+        gb.direct.joypad_bits.select = !select;
+        gb.direct.joypad_bits.start  = !start;
+    }
+
     // Retrieve the framebuffer for rendering
     const uint8_t* get_framebuffer() const {
         return framebuffer;

@@ -5,7 +5,7 @@
 #include <SdFat.h>
 
 // SD card pins (adjusted for your wiring)
-#define SD_CS 10    // Chip Select
+#define SD_CS 46    // Chip Select
 #define SD_SCK 12   // Clock
 #define SD_MISO 13  // Data In (Master In, Slave Out)
 #define SD_MOSI 11  // Data Out (Master Out, Slave In)

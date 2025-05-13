@@ -5,14 +5,23 @@
 #include "graphics.hpp"
 #include "sd.hpp"
 #include "input.hpp"
+#include "wireless.hpp"
 #include <esp_heap_caps.h>
 
 FlywheelGraphics graphics;
 FlywheelSD sd;
 FlywheelInput input;
+FlywheelWireless wireless;
 
 void setup() {
   psramInit();
+
+  // Config power pins
+  analogReadResolution(12); // Optional: sets ADC resolution (ESP32 default is 12 bits)
+  analogSetPinAttenuation(9, ADC_11db); // Critical!
+  pinMode(9, INPUT);   // Stored power ADC pin
+  pinMode(3, INPUT);   // Positive charge input ADC pin
+  pinMode(10, INPUT);  // Negative charge input ADC pin (or however you're measuring discharge)
 
   // Setup input
   input.begin(); // configure inputs
@@ -29,6 +38,9 @@ void setup() {
 	graphics.drawText(150, 100, "Flywheel", 2, 0);
 	graphics.refresh();
   delay(500);
+
+  // prepare wifi stack & sleep
+  wireless.begin();
 
   // setup lua interpreter
 	lua_init_interpreter();

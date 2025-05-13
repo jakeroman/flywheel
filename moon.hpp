@@ -8,6 +8,7 @@ extern "C" {
 	#include <lualib.h>
 }
 #include "esp_heap_caps.h"
+#include "esp_sleep.h"
 
 
 // Flywheel Graphics
@@ -172,17 +173,91 @@ int lua_FlywheelGB_drawFramebuffer(lua_State *L) {
     return 0; // No return values
 }
 
+int lua_FlywheelGB_set_input_state(lua_State *L) {
+    bool up     = lua_toboolean(L, 1);
+    bool down   = lua_toboolean(L, 2);
+    bool left   = lua_toboolean(L, 3);
+    bool right  = lua_toboolean(L, 4);
+    bool a      = lua_toboolean(L, 5);
+    bool b      = lua_toboolean(L, 6);
+    bool select = lua_toboolean(L, 7);
+    bool start  = lua_toboolean(L, 8);
+
+    emulator.set_input_state(up, down, left, right, a, b, select, start);
+
+    return 0; // no return values
+}
+
 static const luaL_Reg FlywheelGBLib[] = {
     {"loadROM", lua_FlywheelGB_loadROM},
     {"startEmulator", lua_FlywheelGB_startEmulator},
     {"stopEmulator", lua_FlywheelGB_stopEmulator},
     {"getFramebuffer", lua_FlywheelGB_getFramebuffer},
     {"drawFramebuffer", lua_FlywheelGB_drawFramebuffer},
+    {"setInputState", lua_FlywheelGB_set_input_state},
     {NULL, NULL} // Sentinel to mark the end of the array
 };
 
 int luaopen_FlywheelGB(lua_State *L) {
     luaL_newlib(L, FlywheelGBLib); // Create a new Lua table with the functions
+    return 1; // Return the table on the Lua stack
+}
+
+
+// Power Management Lib
+int lua_Power_getStoredPower(lua_State *L) {
+    int value = analogRead(9); // ADC pin 9
+    lua_pushinteger(L, value);
+    return 1;
+}
+
+int lua_Power_getPositiveChargePower(lua_State *L) {
+    int value = analogRead(3); // ADC pin 3
+    lua_pushinteger(L, value);
+    return 1;
+}
+
+int lua_Power_getNegativeChargePower(lua_State *L) {
+    int value = analogRead(10); // ADC pin 10
+    lua_pushinteger(L, value);
+    return 1;
+}
+
+int lua_Power_sleep(lua_State *L) {
+    // Get sleep duration from Lua
+    int ms = luaL_checkinteger(L, 1);  // First argument
+
+    if (ms <= 0) {
+        return luaL_error(L, "Sleep time must be positive");
+    }
+
+    // Convert ms to microseconds
+    uint64_t sleep_us = (uint64_t)ms * 1000;
+
+    // Configure timer wakeup
+    esp_sleep_enable_timer_wakeup(sleep_us);
+
+    // Go to light sleep
+    esp_light_sleep_start();
+
+    // Good morning
+    analogReadResolution(12); // Optional: sets ADC resolution (ESP32 default is 12 bits)
+    analogSetPinAttenuation(9, ADC_11db); // Critical!
+
+    return 0; // No return values
+}
+
+
+static const luaL_Reg PowerLib[] = {
+    {"getStoredPower", lua_Power_getStoredPower},
+    {"getPositiveChargePower", lua_Power_getPositiveChargePower},
+    {"getNegativeChargePower", lua_Power_getNegativeChargePower},
+    {"sleep", lua_Power_sleep},
+    {NULL, NULL}
+};
+
+int luaopen_PowerLib(lua_State *L) {
+    luaL_newlib(L, PowerLib); // Create a new Lua table with the functions
     return 1; // Return the table on the Lua stack
 }
 
@@ -276,6 +351,10 @@ bool lua_init_interpreter() {
 
     // Register FlywheelGB library
     luaL_requiref(L, "emulator", luaopen_FlywheelGB, 1);
+    lua_pop(L, 1); // Remove library table from stack after registration
+
+    // Register Power library
+    luaL_requiref(L, "power", luaopen_PowerLib, 1);
     lua_pop(L, 1); // Remove library table from stack after registration
 
     // Register the global sleep function
